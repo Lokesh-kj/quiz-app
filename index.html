@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Web Dev Quiz</title>
+  <title>Math Quiz</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
 
@@ -12,7 +12,7 @@
       justify-content: center;
       align-items: center;
       min-height: 100vh;
-      background: linear-gradient(135deg, #667eea, #764ba2);
+      background: linear-gradient(135deg, #11998e, #38ef7d);
     }
 
     .quiz-container {
@@ -25,85 +25,165 @@
       text-align: center;
     }
 
-    h1 { margin-bottom: 1.5rem; color: #333; }
+    .progress-bar {
+      height: 8px;
+      background: #e0e0e0;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+    }
 
-    #question { font-size: 1.2rem; margin-bottom: 1rem; color: #444; }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: #11998e;
+      transition: width 0.3s;
+    }
 
-    #answers { display: flex; flex-direction: column; gap: 0.6rem; }
+    #timer {
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #e53935;
+      margin-bottom: 0.5rem;
+    }
+
+    h1 { margin-bottom: 1rem; color: #333; }
+
+    #question {
+      font-size: 1.6rem;
+      margin: 1rem 0;
+      color: #333;
+      font-weight: bold;
+    }
+
+    #answers {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+    }
 
     .answer-btn {
-      padding: 0.7rem;
-      border: 2px solid #667eea;
+      padding: 0.9rem;
+      border: 2px solid #11998e;
       border-radius: 8px;
       background: #fff;
       cursor: pointer;
+      font-size: 1.1rem;
       transition: all 0.2s;
-      font-size: 1rem;
     }
 
-    .answer-btn:hover { background: #667eea; color: #fff; }
+    .answer-btn:hover:not(:disabled) { background: #11998e; color: #fff; }
     .answer-btn.correct { background: #4caf50; color: #fff; border-color: #4caf50; }
     .answer-btn.wrong { background: #f44336; color: #fff; border-color: #f44336; }
+    .answer-btn:disabled { cursor: not-allowed; }
 
-    #score { margin-top: 1rem; font-weight: bold; }
+    #info {
+      margin-top: 1rem;
+      display: flex;
+      justify-content: space-between;
+      font-weight: bold;
+      color: #555;
+    }
 
-    #next-btn {
+    #restart-btn {
       margin-top: 1rem;
       padding: 0.6rem 1.5rem;
       border: none;
       border-radius: 8px;
-      background: #667eea;
+      background: #11998e;
       color: #fff;
       cursor: pointer;
       font-size: 1rem;
     }
+
+    #restart-btn:hover { background: #0d7a6f; }
 
     .hidden { display: none; }
   </style>
 </head>
 <body>
   <main class="quiz-container">
-    <h1>Web Dev Quiz</h1>
-    <div id="question-box">
-      <p id="question">Loading...</p>
-      <div id="answers"></div>
+    <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+    <p id="timer">Time: 15s</p>
+    <h1>Math Quiz</h1>
+    <p id="question">Loading...</p>
+    <div id="answers"></div>
+    <div id="info">
+      <span id="counter">Question 1/5</span>
+      <span id="score">Score: 0</span>
     </div>
-    <p id="score">Score: 0</p>
-    <button id="next-btn" class="hidden">Next Question</button>
+    <button id="restart-btn" class="hidden">Play Again</button>
   </main>
 
   <script>
-    const questions = [
-      {
-        question: "What does HTML stand for?",
-        answers: ["HyperText Markup Language", "Home Tool Markup Language", "Hyperlinks Text Mode Language"],
-        correct: 0
-      },
-      {
-        question: "Which property changes text color in CSS?",
-        answers: ["font-style", "text-color", "color"],
-        correct: 2
-      },
-      {
-        question: "How do you declare a variable in modern JavaScript?",
-        answers: ["let myVar", "variable myVar", "v myVar"],
-        correct: 0
-      }
-    ];
+    // ---------- Question generator (random math questions each game!) ----------
+    function generateQuestions() {
+      const questions = [];
+      for (let i = 0; i < 5; i++) {
+        const a = Math.floor(Math.random() * 10) + 1;   // 1 to 10
+        const b = Math.floor(Math.random() * 10) + 1;
+        const operators = ["+", "-", "×"];
+        const op = operators[Math.floor(Math.random() * operators.length)];
+        let correct;
+        if (op === "+") correct = a + b;
+        else if (op === "-") correct = a - b;
+        else correct = a * b;
 
+        // Generate 3 wrong answers
+        const wrongAnswers = new Set();
+        while (wrongAnswers.size < 3) {
+          const wrong = correct + Math.floor(Math.random() * 10) - 5;
+          if (wrong !== correct && wrong >= 0) wrongAnswers.add(wrong);
+        }
+
+        // Build options array and shuffle
+        const options = [...wrongAnswers, correct];
+        options.sort(() => Math.random() - 0.5);
+
+        questions.push({
+          question: `${a} ${op} ${b} = ?`,
+          answers: options.map(String),
+          correct: options.indexOf(correct)
+        });
+      }
+      return questions;
+    }
+
+    let questions = generateQuestions();
     let currentQuestion = 0;
     let score = 0;
+    let timeLeft = 15;
+    let timerId = null;
 
     const questionEl = document.getElementById("question");
     const answersEl = document.getElementById("answers");
     const scoreEl = document.getElementById("score");
-    const nextBtn = document.getElementById("next-btn");
+    const counterEl = document.getElementById("counter");
+    const timerEl = document.getElementById("timer");
+    const progressEl = document.getElementById("progress");
+    const restartBtn = document.getElementById("restart-btn");
+
+    function startTimer() {
+      timeLeft = 15;
+      timerEl.textContent = `Time: ${timeLeft}s`;
+      timerId = setInterval(() => {
+        timeLeft--;
+        timerEl.textContent = `Time: ${timeLeft}s`;
+        if (timeLeft <= 5) timerEl.style.color = "#e53935";
+        if (timeLeft <= 0) {
+          clearInterval(timerId);
+          timeOut();
+        }
+      }, 1000);
+    }
 
     function showQuestion() {
       const q = questions[currentQuestion];
       questionEl.textContent = q.question;
       answersEl.innerHTML = "";
-      nextBtn.classList.add("hidden");
+      counterEl.textContent = `Question ${currentQuestion + 1}/${questions.length}`;
+      progressEl.style.width = `${(currentQuestion / questions.length) * 100}%`;
+      timerEl.style.color = "#333";
 
       q.answers.forEach((answer, index) => {
         const btn = document.createElement("button");
@@ -112,35 +192,63 @@
         btn.addEventListener("click", () => selectAnswer(index, btn));
         answersEl.appendChild(btn);
       });
+
+      startTimer();
+    }
+
+    function lockButtons() {
+      answersEl.querySelectorAll("button").forEach(b => b.disabled = true);
     }
 
     function selectAnswer(index, btn) {
+      clearInterval(timerId);
+      lockButtons();
       const q = questions[currentQuestion];
       const buttons = answersEl.querySelectorAll("button");
 
-      buttons.forEach(b => b.disabled = true);
-
       if (index === q.correct) {
         btn.classList.add("correct");
-        score++;
+        score += timeLeft; // bonus points for speed!
       } else {
         btn.classList.add("wrong");
         buttons[q.correct].classList.add("correct");
       }
-
-      scoreEl.textContent = "Score: " + score;
-      nextBtn.classList.remove("hidden");
+      scoreEl.textContent = `Score: ${score}`;
+      setTimeout(nextQuestion, 1000);
     }
 
-    nextBtn.addEventListener("click", () => {
+    function timeOut() {
+      lockButtons();
+      const q = questions[currentQuestion];
+      answersEl.querySelectorAll("button")[q.correct].classList.add("correct");
+      setTimeout(nextQuestion, 1000);
+    }
+
+    function nextQuestion() {
       currentQuestion++;
       if (currentQuestion < questions.length) {
         showQuestion();
       } else {
-        questionEl.textContent = "Quiz finished! Final score: " + score + "/" + questions.length;
-        answersEl.innerHTML = "";
-        nextBtn.classList.add("hidden");
+        showResult();
       }
+    }
+
+    function showResult() {
+      questionEl.textContent = `Finished! Final score: ${score}`;
+      answersEl.innerHTML = "";
+      timerEl.textContent = "";
+      progressEl.style.width = "100%";
+      counterEl.textContent = "Quiz complete";
+      restartBtn.classList.remove("hidden");
+    }
+
+    restartBtn.addEventListener("click", () => {
+      questions = generateQuestions();  // brand new random questions!
+      currentQuestion = 0;
+      score = 0;
+      scoreEl.textContent = "Score: 0";
+      restartBtn.classList.add("hidden");
+      showQuestion();
     });
 
     showQuestion();
